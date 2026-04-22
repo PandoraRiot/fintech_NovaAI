@@ -546,6 +546,3 @@ docker compose restart frontend
 
 ---
 
-## 📄 Licencia
-
-MIT License — Hackathon 2026
