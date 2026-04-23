@@ -1,19 +1,18 @@
 version: "3.9"
 
-# FinTech Intelligence MVP — Docker Compose
+# FinTech NovaAI — Docker Compose
 #
 # Comandos:
-#   docker compose up --build          → Levanta todo (primera vez)
+#   docker compose up --build          → Primera vez (construye imágenes)
 #   docker compose up -d               → Background
 #   docker compose down                → Bajar todo
-#   docker compose logs -f backend     → Logs del backend
-#   docker compose logs -f frontend    → Logs del dashboard
+#   docker compose logs -f backend     → Logs backend
+#   docker compose logs -f frontend    → Logs dashboard
 #
-# URLs:
-#   http://localhost       → Portal unificado (nginx)
-#   http://localhost:8000  → Backend API
-#   http://localhost:8000/docs → Swagger UI
-#   http://localhost:8501  → Dashboard Streamlit
+# URLs al levantar:
+#   http://localhost:8501  → Dashboard Streamlit  ← PRINCIPAL
+#   http://localhost:8000/docs → Swagger UI (API)
+#   http://localhost       → Nginx (portal unificado)
 
 networks:
   fintech-net:
@@ -81,15 +80,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
-      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
-      - FRANKFURTER_URL=https://api.frankfurter.app
+      # Agente IA: Mistral-7B (Andres pone la URL del cluster)
+      - MISTRAL_BASE_URL=${MISTRAL_BASE_URL:-}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistralai/Mistral-7B-Instruct-v0.2}
+      # Servicios internos
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
-      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-true}
-      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-true}
+      # Feature flags: false para demo presencial sin depender de internet
+      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-false}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-false}
       - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
+      # URL publica del Quiz QR (Julian actualiza con ngrok)
+      - QUIZ_PUBLIC_URL=${QUIZ_PUBLIC_URL:-http://localhost:8000/web/}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -118,12 +120,13 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
-      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
-      - FRANKFURTER_URL=https://api.frankfurter.app
+      - MISTRAL_BASE_URL=${MISTRAL_BASE_URL:-}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistralai/Mistral-7B-Instruct-v0.2}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
+      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-false}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-false}
+      - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     volumes:
@@ -143,7 +146,7 @@ services:
       start_period: 90s
 
   # ─────────────────────────────────────────────────────────
-  # NGINX — Reverse proxy unificado
+  # NGINX
   # ─────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
@@ -160,9 +163,8 @@ services:
       - fintech-net
 
   # ─────────────────────────────────────────────────────────
-  # PGADMIN — Admin UI Postgres (solo desarrollo)
-  # Activar con: docker compose --profile dev up --build
-  # Acceso: http://localhost:5050  |  admin@fintech.com / admin
+  # PGADMIN — Solo desarrollo
+  # Activar: docker compose --profile dev up --build
   # ─────────────────────────────────────────────────────────
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -182,5 +184,3 @@ services:
       - fintech-net
     profiles:
       - dev
-
-      
