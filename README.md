@@ -10,6 +10,16 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 ---
+LINK VIDEO
+---
+https://drive.google.com/file/d/1Vtu7L8OXTIptvGV_lCNyErotGDgZu7AQ/view?usp=sharing
+---
+AUTORES
+---
+ERIKA ALEXANDRA GARCÍA BARRIOS
+JULIAN ANDRES GOMEZ RUEDA
+ANDRÉS DAVID MEDINA HERRERA
+
 
 ## 📌 Descripción del Proyecto
 
