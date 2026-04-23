@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependencias Python (cacheadas — copiar requirements primero)
+# Dependencias Python (layer cacheado)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -22,16 +22,17 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Código fuente
 COPY . .
 
-# Directorios de datos (el JSON ya viene en ./data vía volume mount)
+# Directorios de datos
 RUN mkdir -p data/bronze data/silver data/gold
+
+# Script de arranque: pre-genera el Gold Layer antes de levantar la API
+# Así el dashboard arranca con datos listos (no espera al primer request)
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "api.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "1", \
-     "--log-level", "info"]
+ENTRYPOINT ["/entrypoint.sh"]
