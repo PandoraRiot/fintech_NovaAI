@@ -1,14 +1,7 @@
-# ──────────────────────────────────────────────────────────────────────────
-# Dockerfile.backend — FastAPI Backend: FinTech Intelligence Platform
-# Imagen: python:3.11-slim (~125MB base)
-# Puerto: 8000
-# ──────────────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
 LABEL maintainer="FinTech Hackathon 2026"
-LABEL description="FinTech Intelligence MVP — FastAPI Backend"
 
-# Variables de entorno para Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -16,30 +9,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# ── Dependencias del sistema ───────────────────────────────────────────────
+# Dependencias del sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Dependencias Python (layer cacheado) ──────────────────────────────────
+# Dependencias Python (cacheadas — copiar requirements primero)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# ── Código fuente ─────────────────────────────────────────────────────────
+# Código fuente
 COPY . .
 
-# ── Crear directorios de datos ────────────────────────────────────────────
+# Directorios de datos (el JSON ya viene en ./data vía volume mount)
 RUN mkdir -p data/bronze data/silver data/gold
 
-# ── Healthcheck ───────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# ── Puerto ────────────────────────────────────────────────────────────────
 EXPOSE 8000
 
-# ── Entrypoint ────────────────────────────────────────────────────────────
 CMD ["uvicorn", "api.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
