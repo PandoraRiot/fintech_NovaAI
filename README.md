@@ -545,4 +545,7 @@ docker compose restart frontend
 6. **Sin vendor lock-in**: APIs externas 100% open source (Frankfurter/BCE, ip-api, RestCountries) con fallbacks offline
 
 ---
+## Guía para evaluadores
 
+Disponible en:
+https://github.com/PandoraRiot/fintech_NovaAI/blob/main/JUDGE_GUIDE.md
