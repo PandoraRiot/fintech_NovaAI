@@ -42,8 +42,7 @@ import requests
 
 # ── sys.path primero, ANTES de imports locales ────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from mistral_local import generate_response  # noqa: E402  (import after sys.path)
-
+from agent.mistral_local import generate_response
 # ──────────────────────────────────────────────────────────────────────────
 # Logging
 # ──────────────────────────────────────────────────────────────────────────
