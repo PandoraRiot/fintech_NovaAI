@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 from pathlib import Path
 import sys
-
+from sklearn.metrics import davies_bouldin_score, calinski_harabasz_score
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import KMEANS_K, RANDOM_STATE, GOLD_FILE
@@ -62,10 +62,18 @@ def remove_outliers(X):
 def label_clusters(kmeans, scaler, features):
 
     centers_scaled = kmeans.cluster_centers_
+    
+
     centers = pd.DataFrame(
         scaler.inverse_transform(centers_scaled),
         columns=features
     )
+
+    if "total_spent" in centers.columns:
+        centers["total_spent"] = np.expm1(centers["total_spent"])
+
+    if "current_balance" in centers.columns:
+        centers["current_balance"] = np.expm1(centers["current_balance"])
 
     centers["_score"] = (
     centers["total_spent"].rank(pct=True) * 0.4 +
@@ -120,6 +128,7 @@ def run_clustering(gold_df=None):
     #----Tranformacion logaritmica-----
     X["total_spent"] = np.log1p(X["total_spent"])
     X["current_balance"] = np.log1p(X["current_balance"])
+    X["activity_ratio"] = np.log1p(X["activity_ratio"])
 
     # ── Escalado ────────────────────────────────────
     scaler = StandardScaler()
@@ -136,6 +145,9 @@ def run_clustering(gold_df=None):
 
     # ── Métrica ─────────────────────────────────────
     sil = silhouette_score(X_scaled, gold["cluster"])
+    db = davies_bouldin_score(X_scaled, gold["cluster"])
+    ch = calinski_harabasz_score(X_scaled, gold["cluster"])
+
 
     # ── Etiquetas ───────────────────────────────────
     cluster_labels, centers = label_clusters(kmeans, scaler, features)
@@ -158,7 +170,10 @@ def run_clustering(gold_df=None):
     joblib.dump(scaler, "models/scaler.pkl")
 
     # ── Debug ───────────────────────────────────────
-    print(f"\n✓ Silhouette score: {sil:.3f}\n")
+    print(f"\n✓ Silhouette score: {sil:.3f}")
+    print(f"✓ Davies-Bouldin: {db:.3f}")
+    print(f"✓ Calinski-Harabasz: {ch:.2f}\n")
+
 
     print("📊 Distribución de clusters:")
     for c, (icon, name, _) in cluster_labels.items():
