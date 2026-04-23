@@ -59,14 +59,14 @@ services:
       # Claude API (prioridad 2 — fallback)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # ── Servicios internos ─────────────────────────────────────────────────
-      - FRANKFURTER_URL=http://frankfurter:8080
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
       # ── Feature flags ──────────────────────────────────────────────────────
       - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-true}
-      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-true}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-false}
       - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
     volumes:
+    
       - ./data:/app/data
       - fintech-data:/app/data/bronze
     depends_on:
@@ -74,8 +74,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      frankfurter:
-        condition: service_started
+    
     networks:
       - fintech-net
     healthcheck:
@@ -101,7 +100,6 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
       - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
-      - FRANKFURTER_URL=http://frankfurter:8080
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
       - STREAMLIT_THEME_BASE=dark
@@ -122,23 +120,7 @@ services:
       retries: 5
       start_period: 90s
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # FRANKFURTER: Tasas de cambio self-hosted (BCE — sin API key)
-  # ──────────────────────────────────────────────────────────────────────────
-  frankfurter:
-    image: ghcr.io/hakanensari/frankfurter:latest
-    container_name: frankfurter
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/frankfurterdb
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - fintech-net
-
+  
   # ──────────────────────────────────────────────────────────────────────────
   # POSTGRESQL: Persistencia del Gold Layer
   # ──────────────────────────────────────────────────────────────────────────
