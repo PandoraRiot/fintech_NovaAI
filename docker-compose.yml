@@ -1,30 +1,19 @@
 version: "3.9"
 
-# ══════════════════════════════════════════════════════════════════════════════
 # FinTech Intelligence MVP — Docker Compose
 #
-# Servicios:
-#   backend        → FastAPI (puerto 8000) + Pipeline + ML + Agente IA
-#   frontend       → Streamlit Dashboard (puerto 8501)
-#   postgres       → Persistencia Gold Layer + Frankfurter
-#   redis          → Cache de tasas FX y geolocalizaciones
-#   nginx          → Reverse proxy (acceso unificado por puerto 80)
-#   frankfurter    → Tasas de cambio self-hosted (BCE)
-#
 # Comandos:
-#   docker compose up --build          → Primera vez (construye imágenes)
+#   docker compose up --build          → Levanta todo (primera vez)
 #   docker compose up -d               → Background
-#   docker compose logs -f backend     → Ver logs del backend
-#   docker compose logs -f frontend    → Ver logs del frontend
-#   docker compose down -v             → Bajar todo y borrar volúmenes
+#   docker compose down                → Bajar todo
+#   docker compose logs -f backend     → Logs del backend
+#   docker compose logs -f frontend    → Logs del dashboard
 #
 # URLs:
 #   http://localhost       → Portal unificado (nginx)
-#   http://localhost:8000  → Backend API (FastAPI)
+#   http://localhost:8000  → Backend API
 #   http://localhost:8000/docs → Swagger UI
-#   http://localhost:8000/web  → Quiz Mobile (QR Experience)
-#   http://localhost:8501  → Dashboard (Streamlit)
-# ══════════════════════════════════════════════════════════════════════════════
+#   http://localhost:8501  → Dashboard Streamlit
 
 networks:
   fintech-net:
@@ -33,115 +22,12 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  fintech-data:
 
 services:
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # BACKEND: FastAPI — Pipeline + ML + Agente + Quiz API
-  # Acceso: http://localhost:8000
-  # Docs:   http://localhost:8000/docs
-  # Web QR: http://localhost:8000/web/
-  # ──────────────────────────────────────────────────────────────────────────
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    container_name: fintech-backend
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      # ── Agente IA ─────────────────────────────────────────────────────────
-      # LLaMA 3.2 1B (prioridad 1) — URL del cluster con vLLM/Ollama
-      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
-      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
-      # Claude API (prioridad 2 — fallback)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      # ── Servicios internos ─────────────────────────────────────────────────
-      - FRANKFURTER_URL=http://frankfurter:8080
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
-      # ── Feature flags ──────────────────────────────────────────────────────
-      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-true}
-      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-true}
-      - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
-    volumes:
-      - ./data:/app/data
-      - fintech-data:/app/data/bronze
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      frankfurter:
-        condition: service_started
-    networks:
-      - fintech-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # FRONTEND: Streamlit Dashboard — Visualización y análisis interactivo
-  # Acceso: http://localhost:8501
-  # ──────────────────────────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fintech-frontend
-    restart: unless-stopped
-    ports:
-      - "8501:8501"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
-      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
-      - FRANKFURTER_URL=http://frankfurter:8080
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
-      - STREAMLIT_THEME_BASE=dark
-    volumes:
-      - ./data:/app/data
-      - fintech-data:/app/data/bronze
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fintech-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # FRANKFURTER: Tasas de cambio self-hosted (BCE — sin API key)
-  # ──────────────────────────────────────────────────────────────────────────
-  frankfurter:
-    image: ghcr.io/hakanensari/frankfurter:latest
-    container_name: frankfurter
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/frankfurterdb
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - fintech-net
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # POSTGRESQL: Persistencia del Gold Layer
-  # ──────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
+  # POSTGRES
+  # ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: fintech-postgres
@@ -151,7 +37,7 @@ services:
     environment:
       POSTGRES_USER: fintech
       POSTGRES_PASSWORD: fintech123
-      POSTGRES_MULTIPLE_DATABASES: fintechdb,frankfurterdb
+      POSTGRES_DB: fintechdb
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -163,9 +49,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # REDIS: Cache de tasas FX y geolocalizaciones
-  # ──────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
+  # REDIS
+  # ─────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: fintech-redis
@@ -183,12 +69,82 @@ services:
       timeout: 5s
       retries: 3
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # NGINX: Reverse proxy — acceso unificado en puerto 80
-  # Backend:  http://localhost/api/
-  # Frontend: http://localhost/dashboard/
-  # Web QR:   http://localhost/quiz/
-  # ──────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
+  # BACKEND — FastAPI + Pipeline + ML + Agente
+  # ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: fintech-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
+      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
+      - FRANKFURTER_URL=https://api.frankfurter.app
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
+      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-true}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-true}
+      - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────
+  # FRONTEND — Streamlit Dashboard
+  # ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fintech-frontend
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLAMA_BASE_URL=${LLAMA_BASE_URL:-}
+      - LLAMA_MODEL=${LLAMA_MODEL:-llama3.2:1b}
+      - FRANKFURTER_URL=https://api.frankfurter.app
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ─────────────────────────────────────────────────────────
+  # NGINX — Reverse proxy unificado
+  # ─────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     container_name: fintech-nginx
@@ -203,10 +159,11 @@ services:
     networks:
       - fintech-net
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # PGADMIN: Admin UI de PostgreSQL (solo desarrollo)
+  # ─────────────────────────────────────────────────────────
+  # PGADMIN — Admin UI Postgres (solo desarrollo)
+  # Activar con: docker compose --profile dev up --build
   # Acceso: http://localhost:5050  |  admin@fintech.com / admin
-  # ──────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: fintech-pgadmin
@@ -225,3 +182,5 @@ services:
       - fintech-net
     profiles:
       - dev
+
+      
