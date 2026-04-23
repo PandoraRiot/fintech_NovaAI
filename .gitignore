@@ -1,4 +1,3 @@
-
 # 🔐 Entornos virtuales
 .venv/
 venv/
@@ -33,9 +32,6 @@ __pycache__/
 # 🐧 Linux
 *.swp
 *.swo
-cd '/home/kali/Documentos/fintech_NovaAI'
-
-
 
 # 🪟 Windows
 Thumbs.db
