@@ -1,6 +1,5 @@
-
 """
-models/clustering.py — Versión mejorada
+models/clustering.py — Versión mejorada (estable)
 """
 
 import numpy as np
@@ -15,6 +14,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import KMEANS_K, RANDOM_STATE, GOLD_FILE
+
 
 CLUSTER_FEATURES = [
     "total_spent",
@@ -31,30 +31,35 @@ CLUSTER_FEATURES = [
 
 
 def add_derived_features(df):
-    """Features semánticas (muy importantes)"""
-
     df = df.copy()
 
+    # ── Features originales ─────────────────────────
     df["spend_per_txn"] = df["total_spent"] / df["n_transactions"].replace(0, np.nan)
     df["balance_per_txn"] = df["current_balance"] / df["n_transactions"].replace(0, np.nan)
     df["activity_ratio"] = df["n_transactions"] / df["unique_days_active"].replace(0, np.nan)
-    df["spend_vs_balance"] = df["total_spent"] / df["current_balance"].replace(0, np.nan)
 
-    # proporciones de categorías
+    # SE ELIMINA spend_vs_balance (muy inestable)
+
+    # ── FIX ratios categorías (MUY IMPORTANTE) ──────
     for col in ["cat_shopping", "cat_food", "cat_entertainment"]:
         if col in df.columns:
-            df[f"{col}_ratio"] = df[col] / df["total_spent"].replace(0, np.nan)
+            df[f"{col}_ratio"] = np.where(
+                df["total_spent"] > 0,
+                df[col] / df["total_spent"],
+                0
+            )
+
+    # ── NUEVA FEATURE (aporta bastante) ─────────────
+    df["transaction_frequency"] = df["n_transactions"] / df["unique_days_active"].replace(0, np.nan)
 
     return df.fillna(0)
 
 
 def remove_outliers(X):
-    """Clip outliers"""
     return X.clip(lower=X.quantile(0.01), upper=X.quantile(0.99), axis=1)
 
 
 def label_clusters(kmeans, scaler, features):
-    """Etiquetado robusto basado en centroides reales"""
 
     centers_scaled = kmeans.cluster_centers_
     centers = pd.DataFrame(
@@ -62,11 +67,10 @@ def label_clusters(kmeans, scaler, features):
         columns=features
     )
 
-    # Score mejorado
     centers["_score"] = (
-        centers["total_spent"] * 0.5 +
-        centers["current_balance"] * 0.3 -
-        centers["fail_ratio"] * 0.7
+    centers["total_spent"].rank(pct=True) * 0.4 +
+    centers["current_balance"].rank(pct=True) * 0.3 -
+    centers["fail_ratio"].rank(pct=True) * 0.3
     )
 
     centers = centers.sort_values("_score", ascending=False).reset_index()
@@ -86,22 +90,21 @@ def label_clusters(kmeans, scaler, features):
 
 
 def run_clustering(gold_df=None):
-    print("▶ Clustering mejorado...")
+    print("▶ Clustering mejorado (estable)...")
 
     gold = gold_df.copy() if gold_df is not None else pd.read_parquet(GOLD_FILE)
 
-    # ── Features derivadas ───────────────────────────
+    # ── Feature engineering ─────────────────────────
     gold = add_derived_features(gold)
 
-    # ── Selección ────────────────────────────────────
+    # ── Selección ───────────────────────────────────
     features = [f for f in CLUSTER_FEATURES if f in gold.columns]
 
-    # añadir nuevas
     features += [
         "spend_per_txn",
         "balance_per_txn",
         "activity_ratio",
-        "spend_vs_balance",
+        "transaction_frequency",  # ← nueva buena
         "cat_shopping_ratio",
         "cat_food_ratio",
         "cat_entertainment_ratio",
@@ -111,45 +114,50 @@ def run_clustering(gold_df=None):
 
     X = gold[features].fillna(0)
 
-    # ── Outliers ─────────────────────────────────────
+    # ── Outliers ────────────────────────────────────
     X = remove_outliers(X)
 
-    # ── Escalado ─────────────────────────────────────
+    #----Tranformacion logaritmica-----
+    X["total_spent"] = np.log1p(X["total_spent"])
+    X["current_balance"] = np.log1p(X["current_balance"])
+
+    # ── Escalado ────────────────────────────────────
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # ── Modelo ───────────────────────────────────────
+    # ── Modelo ──────────────────────────────────────
     kmeans = KMeans(
         n_clusters=KMEANS_K,
         random_state=RANDOM_STATE,
-        n_init=10
+        n_init=20
     )
 
     gold["cluster"] = kmeans.fit_predict(X_scaled)
 
-    # ── Métrica ──────────────────────────────────────
+    # ── Métrica ─────────────────────────────────────
     sil = silhouette_score(X_scaled, gold["cluster"])
 
-    # ── Etiquetas ────────────────────────────────────
+    # ── Etiquetas ───────────────────────────────────
     cluster_labels, centers = label_clusters(kmeans, scaler, features)
 
     gold["segment_icon"]  = gold["cluster"].map(lambda c: cluster_labels[c][0])
     gold["segment_name"]  = gold["cluster"].map(lambda c: cluster_labels[c][1])
     gold["segment_color"] = gold["cluster"].map(lambda c: cluster_labels[c][2])
 
-    # ── Guardar resultados ───────────────────────────
+    # ── Guardar ─────────────────────────────────────
     Path("data/gold").mkdir(parents=True, exist_ok=True)
-    # ── FIX tipos para parquet ─────────────────────
+
     for col in gold.columns:
         if gold[col].dtype == "object":
             gold[col] = gold[col].astype(str)
+
     gold.to_parquet("data/gold/gold_clustered.parquet", index=False)
 
     Path("models").mkdir(exist_ok=True)
     joblib.dump(kmeans, "models/kmeans.pkl")
     joblib.dump(scaler, "models/scaler.pkl")
 
-    # ── Debug / interpretabilidad ────────────────────
+    # ── Debug ───────────────────────────────────────
     print(f"\n✓ Silhouette score: {sil:.3f}\n")
 
     print("📊 Distribución de clusters:")
@@ -157,10 +165,11 @@ def run_clustering(gold_df=None):
         n = (gold["cluster"] == c).sum()
         print(f"{icon} {name}: {n} usuarios ({n/len(gold)*100:.1f}%)")
 
-    print("\n🧠 Centroides (interpretación):")
-    print(centers.round(2))
-
+    print("\n🧠 Centroides:")
+    #print(centers.round(2))
+    print(centers.sort_values("_score", ascending=False).round(2))
     return gold, kmeans, scaler, sil, cluster_labels
+
 
 if __name__ == "__main__":
     run_clustering()
