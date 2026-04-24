@@ -1,0 +1,186 @@
+version: "3.9"
+
+# FinTech NovaAI — Docker Compose
+#
+# Comandos:
+#   docker compose up --build          → Primera vez (construye imágenes)
+#   docker compose up -d               → Background
+#   docker compose down                → Bajar todo
+#   docker compose logs -f backend     → Logs backend
+#   docker compose logs -f frontend    → Logs dashboard
+#
+# URLs al levantar:
+#   http://localhost:8501  → Dashboard Streamlit  ← PRINCIPAL
+#   http://localhost:8000/docs → Swagger UI (API)
+#   http://localhost       → Nginx (portal unificado)
+
+networks:
+  fintech-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+
+services:
+
+  # ─────────────────────────────────────────────────────────
+  # POSTGRES
+  # ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: fintech-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: fintech
+      POSTGRES_PASSWORD: fintech123
+      POSTGRES_DB: fintechdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fintech -d fintechdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # REDIS
+  # ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: fintech-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────
+  # BACKEND — FastAPI + Pipeline + ML + Agente
+  # ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: fintech-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Agente IA: Mistral-7B (Andres pone la URL del cluster)
+      - MISTRAL_BASE_URL=${MISTRAL_BASE_URL:-}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistralai/Mistral-7B-Instruct-v0.2}
+      # Servicios internos
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
+      # Feature flags: false para demo presencial sin depender de internet
+      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-false}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-false}
+      - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
+      # URL publica del Quiz QR (Julian actualiza con ngrok)
+      - QUIZ_PUBLIC_URL=${QUIZ_PUBLIC_URL:-http://localhost:8000/web/}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────
+  # FRONTEND — Streamlit Dashboard
+  # ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fintech-frontend
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - MISTRAL_BASE_URL=${MISTRAL_BASE_URL:-}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistralai/Mistral-7B-Instruct-v0.2}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://fintech:fintech123@postgres:5432/fintechdb
+      - ENABLE_GEO_ENRICHMENT=${ENABLE_GEO_ENRICHMENT:-false}
+      - ENABLE_FX_ENRICHMENT=${ENABLE_FX_ENRICHMENT:-false}
+      - ENABLE_DB_PERSISTENCE=${ENABLE_DB_PERSISTENCE:-true}
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ─────────────────────────────────────────────────────────
+  # NGINX
+  # ─────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: fintech-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - fintech-net
+
+  # ─────────────────────────────────────────────────────────
+  # PGADMIN — Solo desarrollo
+  # Activar: docker compose --profile dev up --build
+  # ─────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fintech-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fintech.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - ./docker/pgadmin-servers.json:/pgadmin4/servers.json
+    depends_on:
+      - postgres
+    networks:
+      - fintech-net
+    profiles:
+      - dev
