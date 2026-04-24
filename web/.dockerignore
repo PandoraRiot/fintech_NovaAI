@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git
+*.ipynb
+data/bronze/
+data/silver/
+data/gold/
+*.parquet
