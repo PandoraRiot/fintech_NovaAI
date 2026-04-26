@@ -1,6 +1,5 @@
 """
-<<<<<<< HEAD
- HEAD
+
 agent/agent.py — Agente IA financiero · Producción
 ════════════════════════════════════════════════════════════════════════════
 
@@ -38,6 +37,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+<<<<<<< HEAD
 =======
 agent/agent.py — Agente IA optimizado · FinTech NovaAI
 ═══════════════════════════════════════════════════════
@@ -94,6 +94,12 @@ import pandas as pd
 import requests
 
 <<<<<<< HEAD
+=======
+
+import pandas as pd
+import requests
+
+>>>>>>> main
 # ── sys.path primero, ANTES de imports locales ────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agent.mistral_local import generate_response
@@ -101,6 +107,7 @@ from agent.mistral_local import generate_response
 # Logging
 # ──────────────────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 =======
 import requests
 
@@ -112,6 +119,8 @@ from agent.mistral_local import generate_response
 # ──────────────────────────────────────────────────────────────────────────
 
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -119,6 +128,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> main
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -178,6 +190,7 @@ Tu misión: ayudar al usuario a entender su comportamiento financiero y tomar me
 
 ⚠️ NIVEL DE RIESGO: <BAJO | MEDIO | ALTO | CRÍTICO>
 <una oración que justifique el nivel>
+<<<<<<< HEAD
 =======
 # ─── Timeouts ─────────────────────────────────────────────────────────────
 CONNECT_TIMEOUT  = 5    # segundos para abrir conexión TCP
@@ -185,7 +198,198 @@ READ_TIMEOUT     = 90   # segundos esperando la respuesta (GPU local puede ser l
 HEALTH_TIMEOUT   = 4    # ping de health check
 =======
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
 
+💡 RECOMENDACIÓN
+<2-3 acciones concretas priorizadas>
+
+✅ ACCIÓN PARA HOY
+<una sola acción inmediata y específica>
+
+══ FEW-SHOT EXAMPLES ══
+
+[EJEMPLO 1 — riesgo CRÍTICO]
+PREGUNTA: ¿Estoy en riesgo financiero?
+RESPUESTA:
+🔍 DIAGNÓSTICO
+Tu tasa de fallos del 25% y balance de $50.000 COP indican estrés financiero activo.
+⚠️ NIVEL DE RIESGO: CRÍTICO
+Combinas bajo balance, alta tasa de fallos y actividad nocturna, patrón típico de sobreendeudamiento.
+💡 RECOMENDACIÓN
+1. Pausa compras no esenciales los próximos 7 días.
+2. Renegocia si tienes deudas pendientes.
+3. Activa alertas de saldo mínimo en la app.
+✅ ACCIÓN PARA HOY
+Revisa los 5 últimos gastos y cancela al menos uno recurrente que no necesitas.
+
+[EJEMPLO 2 — riesgo BAJO]
+PREGUNTA: ¿Cómo está mi balance?
+RESPUESTA:
+🔍 DIAGNÓSTICO
+Tu balance actual de $1.200.000 COP supera tu promedio histórico de $900.000, señal positiva.
+⚠️ NIVEL DE RIESGO: BAJO
+Tienes liquidez saludable y una tasa de fallos del 2%.
+💡 RECOMENDACIÓN
+1. Considera mover el excedente a un ahorro de corto plazo.
+2. Mantén al menos $400.000 como reserva de emergencia.
+✅ ACCIÓN PARA HOY
+Transfiere $200.000 a una cuenta de ahorro o CDT de bajo riesgo.\
+"""
+
+# Instrucción de idioma inyectada dinámicamente
+_LANG_INSTRUCTIONS = {
+    "es": "Responde completamente en español. No uses inglés bajo ninguna circunstancia.",
+    "en": "Respond entirely in English. Do not use Spanish under any circumstances.",
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CIRCUIT BREAKER
+# ══════════════════════════════════════════════════════════════════════════
+
+class CircuitBreaker:
+    """
+    Patrón Circuit Breaker para endpoints HTTP.
+
+    CLOSED  → llamadas normales.
+    OPEN    → bloquea llamadas por `cooldown_secs` tras `failure_threshold` fallos.
+    HALF-OPEN → permite 1 intento de prueba al expirar el cooldown.
+    """
+
+    def __init__(self, name: str, failure_threshold: int, cooldown_secs: int) -> None:
+        self.name = name
+        self._threshold = failure_threshold
+        self._cooldown = cooldown_secs
+        self._failures = 0
+        self._opened_at: Optional[float] = None
+
+    @property
+    def is_open(self) -> bool:
+        if self._opened_at is None:
+            return False
+        if time.monotonic() - self._opened_at > self._cooldown:
+            log.info(f"[CB:{self.name}] Cooldown expirado → HALF-OPEN, intentando de nuevo…")
+            self._opened_at = None  # permite un intento de prueba
+            return False
+        return True
+
+    def record_success(self) -> None:
+        self._failures = 0
+        self._opened_at = None
+
+    def record_failure(self) -> None:
+        self._failures += 1
+        if self._failures >= self._threshold:
+            self._opened_at = time.monotonic()
+            log.warning(
+                f"[CB:{self.name}] ABIERTO tras {self._failures} fallos. "
+                f"Cooldown: {self._cooldown}s."
+            )
+
+
+_cb_llama  = CircuitBreaker("LLaMA",  CFG.cb_failure_threshold, CFG.cb_cooldown_secs)
+_cb_claude = CircuitBreaker("Claude", CFG.cb_failure_threshold, CFG.cb_cooldown_secs)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CACHE DE RESPUESTAS (LRU)
+# ══════════════════════════════════════════════════════════════════════════
+
+def _cache_key(user_context: str, question: str) -> str:
+    """Hash SHA-256 truncado para usar como clave de cache."""
+    raw = f"{user_context}||{question.strip().lower()}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+_response_cache: Dict[str, str] = {}   # se limita con _evict_cache()
+_cache_order: List[str] = []           # FIFO para LRU manual (sin dependencias extra)
+
+
+def _cache_get(key: str) -> Optional[str]:
+    return _response_cache.get(key)
+
+
+def _cache_set(key: str, value: str) -> None:
+    if key in _response_cache:
+        return
+    if len(_cache_order) >= CFG.cache_max_size:
+        oldest = _cache_order.pop(0)
+        _response_cache.pop(oldest, None)
+    _response_cache[key] = value
+    _cache_order.append(key)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# DETECCIÓN DE IDIOMA
+# ══════════════════════════════════════════════════════════════════════════
+
+_ES_WORDS = {
+    "qué", "cómo", "cuál", "cuánto", "cuándo", "dónde", "quién",
+    "estoy", "tengo", "gasto", "gasté", "saldo", "balance", "riesgo",
+    "dinero", "deuda", "ahorro", "cuenta", "banco", "pago", "cobro",
+    "hola", "dame", "dime", "ayuda", "resumen", "análisis", "situación",
+    "financiero", "financiera", "transacción", "movimiento",
+}
+
+_EN_WORDS = {
+    "what", "how", "which", "when", "where", "who", "my", "am", "is",
+    "balance", "risk", "spend", "spent", "money", "debt", "saving",
+    "account", "bank", "payment", "transaction", "summary", "analysis",
+    "financial", "help", "show", "tell",
+}
+
+
+def detect_language(text: str) -> str:
+    """Detecta idioma por intersección con wordlists. Default: 'es'."""
+    words = set(text.lower().split())
+    score_es = len(words & _ES_WORDS)
+    score_en = len(words & _EN_WORDS)
+    return "en" if score_en > score_es else "es"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# RIESGO FINANCIERO
+# ══════════════════════════════════════════════════════════════════════════
+
+def compute_risk_score(user_row: pd.Series) -> Tuple[int, str]:
+    """
+    Calcula un score de riesgo numérico (0–100) y su etiqueta.
+
+    Ponderación:
+      30 pts — estrés financiero combinado (is_financial_stress)
+      25 pts — tasa de fallos alta (fail_ratio > 0.20)
+      20 pts — balance bajo (is_low_balance)
+      15 pts — usuario dormido (is_dormant)
+      10 pts — fail_ratio moderado (0.10-0.20)
+    """
+    score = 0
+    score += 30 * int(bool(user_row.get("financial_stress", 0)))
+    score += 25 * int(bool(user_row.get("is_high_risk", 0)))
+    score += 20 * int(bool(user_row.get("is_low_balance", 0)))
+    score += 15 * int(bool(user_row.get("is_dormant", 0)))
+
+    fail_ratio = float(user_row.get("fail_ratio", 0))
+    if 0.10 <= fail_ratio < 0.20:
+        score += 10
+
+    score = min(score, 100)
+
+    if score >= 50:
+        label = "CRÍTICO"
+    elif score >= 30:
+        label = "ALTO"
+    elif score >= 15:
+        label = "MEDIO"
+    else:
+        label = "BAJO"
+
+    return score, label
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CONSTRUCCIÓN DE CONTEXTO Y PROMPT
+# ══════════════════════════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONFIG
@@ -623,6 +827,7 @@ def compute_risk_score(user_row: pd.Series) -> Tuple[int, str]:
 def build_user_context(user_row: pd.Series) -> str:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Construye el bloque de contexto financiero para el prompt."""
 =======
     """Construye el contexto financiero del usuario para el LLM."""
@@ -630,6 +835,9 @@ def build_user_context(user_row: pd.Series) -> str:
 =======
     """Construye el bloque de contexto financiero para el prompt."""
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+    """Construye el bloque de contexto financiero para el prompt."""
+>>>>>>> main
     cat_cols = [c for c in user_row.index if c.startswith("cat_")]
     cat_info = {
         c.replace("cat_", "").capitalize(): f"${user_row.get(c, 0):,.0f} COP"
@@ -639,6 +847,9 @@ def build_user_context(user_row: pd.Series) -> str:
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> main
     risk_score, risk_label = compute_risk_score(user_row)
 
     return (
@@ -919,6 +1130,7 @@ def _try_claude(
     except Exception as exc:
         log.warning(f"[Claude] Error: {exc}")
         _cb_claude.record_failure()
+<<<<<<< HEAD
 =======
     return f"""
 PERFIL DEL USUARIO ({uid}):
@@ -1227,11 +1439,14 @@ def _try_claude(
     except Exception as exc:
         log.warning(f"[Claude] Error: {exc}")
         _cb_claude.record_failure()
+=======
+>>>>>>> main
 
     return None
 
 
 # ══════════════════════════════════════════════════════════════════════════
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 # FALLBACK POR REGLAS — completo y accionable
@@ -1241,6 +1456,9 @@ def _try_claude(
 =======
 # FALLBACK POR REGLAS — completo y accionable
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+# FALLBACK POR REGLAS — completo y accionable
+>>>>>>> main
 # ══════════════════════════════════════════════════════════════════════════
 
 def _rule_based_fallback(question: str, user_row: pd.Series, lang: str) -> str:
@@ -1248,8 +1466,11 @@ def _rule_based_fallback(question: str, user_row: pd.Series, lang: str) -> str:
     Respuestas determinísticas de alta calidad.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
     Latencia: ~0ms. Sin dependencias externas. NUNCA lanza excepciones.
 
     Cubre 4 categorías de pregunta:
@@ -1258,6 +1479,9 @@ def _rule_based_fallback(question: str, user_row: pd.Series, lang: str) -> str:
       • Estado del balance
       • Resumen / consulta genérica
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> main
     """
     q = question.lower()
     risk_score, risk_label = compute_risk_score(user_row)
@@ -1412,6 +1636,7 @@ def _rule_based_fallback(question: str, user_row: pd.Series, lang: str) -> str:
         f"3. Establece metas de presupuesto mensual por categoría."
         f"\n\n✅ ACCIÓN PARA HOY\n"
         f"Revisa tus últimas 10 transacciones y clasifica cada una como esencial u opcional."
+<<<<<<< HEAD
 =======
     Sin dependencias externas. Latencia < 1ms.
 =======
@@ -1577,6 +1802,8 @@ def _rule_based_fallback(question: str, user_row: pd.Series, lang: str) -> str:
         f"\n\n✅ ACCIÓN PARA HOY\n"
         f"Revisa tus últimas 10 transacciones y clasifica cada una como esencial u opcional."
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
     )
 
 
@@ -1591,6 +1818,7 @@ def ask_agent(
     user_row: pd.Series,
     history: Optional[List[Dict]] = None,
     api_key: Optional[str] = None,
+<<<<<<< HEAD
 =======
     user_row:  pd.Series,
     history:   List[Dict] = None,
@@ -1601,20 +1829,28 @@ def ask_agent(
     history: Optional[List[Dict]] = None,
     api_key: Optional[str] = None,
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
 ) -> Tuple[str, List[Dict], str]:
     """
     Punto de entrada principal del agente.
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
     Args:
         question:  Pregunta del usuario (español o inglés).
         user_row:  Fila de pandas con el perfil financiero.
         history:   Turnos anteriores [{'role': 'user'|'assistant', 'content': str}].
         api_key:   API key de Anthropic (opcional, se lee de env si no se pasa).
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> main
 
     Returns:
         (answer, new_history, mode)
@@ -1700,6 +1936,9 @@ def ask_agent(
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> main
     # ── 2️⃣  Mistral local ────────────────────────────────────────────────
     if not answer:
         answer = _try_mistral(question, user_context, lang)
@@ -1709,6 +1948,7 @@ def ask_agent(
     # ── 3️⃣  Claude API ───────────────────────────────────────────────────
     if not answer:
         key = api_key or CFG.anthropic_api_key
+<<<<<<< HEAD
         answer = _try_claude(question, user_context, history, key)
 =======
     # 2️⃣  LLaMA (fallback GPU secundario)
@@ -1742,13 +1982,18 @@ def ask_agent(
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
     if not answer:
         key = api_key or CFG.anthropic_api_key
+=======
+>>>>>>> main
         answer = _try_claude(question, user_context, history, key)
         if answer:
             mode = "claude"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> fd559b1 (fix: desacople frankfurter + fix plotly fillcolor + docker estable)
 =======
+=======
+>>>>>>> main
     # ── 4️⃣  Fallback por reglas (NUNCA falla) ────────────────────────────
     if not answer:
         answer = _rule_based_fallback(question, user_row, lang)
@@ -1759,7 +2004,10 @@ def ask_agent(
         _cache_set(cache_k, answer)
 
     # ── Historial ─────────────────────────────────────────────────────────
+<<<<<<< HEAD
 >>>>>>> b8a43b0 (chore: remove data folder from repo)
+=======
+>>>>>>> main
     new_history = history + [
         {"role": "user", "content": question},
         {"role": "assistant", "content": answer},
@@ -1772,6 +2020,12 @@ def ask_agent(
     elapsed = (time.perf_counter() - t0) * 1000
     log.info(f"[{request_id}] modo='{mode}' | {len(answer)} chars | {elapsed:.0f}ms")
 
+<<<<<<< HEAD
+=======
+    elapsed = (time.perf_counter() - t0) * 1000
+    log.info(f"[{request_id}] modo='{mode}' | {len(answer)} chars | {elapsed:.0f}ms")
+
+>>>>>>> main
     return answer, new_history, mode
 <<<<<<< HEAD
 =======

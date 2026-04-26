@@ -1,6 +1,6 @@
 # 🏦 FinTech Intelligence Platform
 
-> Plataforma de inteligencia financiera en tiempo (casi) real — MVP nivel producción  
+ Plataforma de inteligencia financiera en tiempo (casi) real — MVP nivel producción  
 **Hackathon 2026 · Arquitectura Medallion · ML + LLM + Mobile**
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://python.org/) [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green?logo=fastapi)](https://fastapi.tiangolo.com/) [![Streamlit](https://img.shields.io/badge/Streamlit-1.32-red?logo=streamlit)](https://streamlit.io/) [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://docker.com/) 
@@ -584,6 +584,9 @@ docker compose restart frontend
 6. **Sin vendor lock-in**: APIs externas 100% open source (Frankfurter/BCE, ip-api, RestCountries) con fallbacks offline
 
 
+<<<<<<< HEAD
 Guía para evaluadores, profesores, interesados. 
 
 Disponible en: [Guía y repo](https://github.com/PandoraRiot/fintech_NovaAI/blob/main/JUDGE_GUIDE.md)
+=======
+>>>>>>> main

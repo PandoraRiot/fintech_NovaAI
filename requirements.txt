@@ -58,4 +58,5 @@ torchvision
 torchaudio
 
 # ── Cuantización 4-bit (Mistral en T4 ~4 GB VRAM) ────────────────────────
+
 bitsandbytes>=0.42.0
