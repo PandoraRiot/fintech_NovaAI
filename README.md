@@ -448,62 +448,61 @@ QUIZ MOBILE (5 preguntas)
 ## 📁 Estructura del Proyecto
 
 ```
-fintech-intelligence-mvp/  
-│  
-├── api/                      \# FastAPI backend  
-│   ├── main.py               \# App principal + middlewares  
-│   ├── schemas.py            \# Pydantic v2 — contratos de datos  
-│   └── routers/  
-│       ├── events.py         \# POST /events/ingest  
-│       ├── pipeline.py       \# POST /pipeline/run  
-│       ├── users.py          \# GET /users/\{id\} + agente  
-│       └── quiz.py           \# POST /quiz/submit  
-│  
-├── pipeline/                 \# ETL Medallion  
-│   ├── bronze.py             \# JSON → Parquet (flatten)  
-│   ├── silver.py             \# Limpieza + features temporales  
-│   └── gold.py               \# User 360° (35+ features)  
-│  
-├── models/                   \# Machine Learning  
-│   ├── clustering.py         \# KMeans k=4 + etiquetado  
-│   └── anomaly.py            \# Isolation Forest  
-│  
-├── insights/  
-│   └── engine.py             \# Motor de insights (8 tipos)  
-│  
-├── agent/  
-│   └── agent.py              \# LLaMA → Claude → Offline  
-│  
-├── enrichment/  
-│   └── apis.py               \# Frankfurter + ip-api + RestCountries  
-│  
-├── dashboard/  
-│   └── app.py                \# Streamlit (5 secciones)  
-│  
-├── web/  
-│   └── index.html            \# Quiz Mobile (HTML/JS puro)  
-│  
-├── utils/  
-│   └── db.py                 \# PostgreSQL (graceful degradation)  
-│  
-├── docker/  
-│   ├── nginx.conf            \# Reverse proxy completo  
-│   ├── postgres-init.sql     \# DDL del Gold Layer  
-│   └── pgadmin-servers.json  \# Config pgAdmin  
-│  
-├── data/  
-│   ├── fintech\_events\_v4.json \# Dataset de eventos  
-│   ├── bronze/               \# Parquet Bronze  
-│   ├── silver/               \# Parquet Silver  
-│   └── gold/                 \# Parquet Gold (user\_360.parquet)  
-│  
-├── config.py                 \# Fuente única de verdad  
-├── run\_pipeline.py           \# Script standalone  
-├── requirements.txt  
-├── Dockerfile                \# Streamlit frontend  
-├── Dockerfile.backend        \# FastAPI backend  
-├── docker-compose.yml  
-└── .env.example
+fintech_NovaAI/
+├── agent/
+│   ├── agent.py
+│   ├── mistral_local.py
+│   └── __init__.py
+├── api/
+│   ├── main.py
+│   ├── schemas.py
+│   ├── __init__.py
+│   └── routers/
+│       ├── events.py
+│       ├── pipeline.py
+│       ├── quiz.py
+│       ├── users.py
+│       └── __init__.py
+├── config.py
+├── dashboard/
+│   ├── app.py
+│   └── __init__.py
+├── docker/
+│   ├── entrypoint.sh
+│   ├── nginx.conf
+│   ├── pgadmin-servers.json
+│   └── postgres-init.sql
+├── docker-compose.yml
+├── Dockerfile
+├── Dockerfile.backend
+├── enrichment/
+│   ├── apis.py
+│   └── __init__.py
+├── insights/
+│   ├── engine.py
+│   └── __init__.py
+├── models/
+│   ├── anomaly.py
+│   ├── clustering.py
+│   └── __init__.py
+├── pipeline/
+│   ├── bronze.py
+│   ├── silver.py
+│   ├── gold.py
+│   └── __init__.py
+├── utils/
+│   ├── db.py
+│   └── __init__.py
+├── web/
+│   ├── index.html
+│   └── main.py
+├── run_pipeline.py
+├── test_agent.py
+├── requirements.txt
+├── README.md
+├── .env.example
+├── .dockerignore
+└── .gitignore
 ```
 
 
